@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --- Styles globaux sûrs --- */
+html, body {
+  height: 100%;
+  background-color: #fff;
+  color: #0f172a; /* slate-900 */
+}
+
+/* Bouton primaire réutilisable (sans couleurs custom non définies) */
+@layer components {
+  .btn-primary {
+    @apply bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 shadow-lg hover:shadow-xl;
+  }
+}
