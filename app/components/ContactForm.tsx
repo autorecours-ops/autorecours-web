@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { XMarkIcon, PaperClipIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
-import { useDropzone } from 'react-dropzone'
+import { XMarkIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
 
 interface ContactFormProps {
   onSubmit?: (data: any) => void
@@ -15,52 +14,10 @@ const WEB3FORMS_ACCESS_KEY = '7ffee884-54f4-4746-a605-fb33e1a5211b'
 const REDIRECT_URL = 'https://autorecours-web.vercel.app/confirmation'
 
 export default function ContactForm({ onSubmit, onClose }: ContactFormProps) {
-  const [files, setFiles] = useState<{ fps?: File; carteGrise?: File }>({})
+  const formRef = useRef<HTMLFormElement>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const formRef = useRef<HTMLFormElement>(null)
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    watch,
-    setValue,
-  } = useForm()
-
-  const fpsFile = watch('file_avis')
-  const carteGriseFile = watch('file_carte')
-
-  const { getRootProps: getFpsRootProps, getInputProps: getFpsInputProps } = useDropzone({
-    accept: {
-      'image/*': ['.jpeg', '.jpg', '.png', '.heic'],
-      'application/pdf': ['.pdf'],
-    },
-    maxSize: 10 * 1024 * 1024,
-    onDrop: (acceptedFiles) => {
-      const file = acceptedFiles[0]
-      if (file) {
-        setFiles((prev) => ({ ...prev, fps: file }))
-        // on utilise le même name que celui attendu par Web3Forms
-        setValue('file_avis', file)
-      }
-    },
-  })
-
-  const { getRootProps: getCarteRootProps, getInputProps: getCarteInputProps } = useDropzone({
-    accept: {
-      'image/*': ['.jpeg', '.jpg', '.png', '.heic'],
-      'application/pdf': ['.pdf'],
-    },
-    maxSize: 10 * 1024 * 1024,
-    onDrop: (acceptedFiles) => {
-      const file = acceptedFiles[0]
-      if (file) {
-        setFiles((prev) => ({ ...prev, carteGrise: file }))
-        setValue('file_carte', file)
-      }
-    },
-  })
+  const { register, handleSubmit, formState: { errors }, watch } = useForm()
 
   function detectCityFromFPS(fpsNumber: string) {
     const prefixes: Record<string, { city: string; portal: string }> = {
@@ -83,31 +40,24 @@ export default function ContactForm({ onSubmit, onClose }: ContactFormProps) {
     'Autre (à préciser)',
   ]
 
-  // Soumission : on laisse RHF valider, puis on soumet le <form> en POST vers Web3Forms
   const onFormSubmit = async (data: any) => {
     setIsSubmitting(true)
     try {
-      // enrichissement (facultatif) : ville/portail détectés depuis le n° FPS
-      if (data.fps) {
-        const cityData = detectCityFromFPS(String(data.fps))
-        // On passe ces infos à Web3Forms via des champs cachés
-        if (formRef.current) {
-          ensureHidden(formRef.current, 'ville_detectee', cityData.city)
-          ensureHidden(formRef.current, 'portail_detecte', cityData.portal)
-        }
+      // enrichissement ville/portail détectés
+      const fps = String(data.fps || '')
+      if (fps && formRef.current) {
+        const { city, portal } = detectCityFromFPS(fps)
+        ensureHidden(formRef.current, 'ville_detectee', city)
+        ensureHidden(formRef.current, 'portail_detecte', portal)
       }
 
-      // Callback interne éventuel
       onSubmit?.(data)
-
-      // Submit HTML vers Web3Forms (avec redirect auto)
-      formRef.current?.submit()
+      formRef.current?.submit() // envoi HTML vers Web3Forms
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  // utilitaire : crée/maj un input hidden dans le form
   function ensureHidden(form: HTMLFormElement, name: string, value: string) {
     let input = form.querySelector(`input[name="${name}"]`) as HTMLInputElement | null
     if (!input) {
@@ -125,33 +75,33 @@ export default function ContactForm({ onSubmit, onClose }: ContactFormProps) {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-2xl font-bold text-navy-900">Contester mon FPS</h2>
-          <p className="text-navy-600">0€ maintenant, payez seulement si on gagne</p>
+          <p className="text-navy-600">0 € maintenant, 19 € seulement si on gagne</p>
         </div>
         <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
           <XMarkIcon className="w-6 h-6 text-gray-500" />
         </button>
       </div>
 
-      {/* IMPORTANT : action Web3Forms + multipart + hidden keys */}
+      {/* FORM → Web3Forms sans fichiers */}
       <form
         ref={formRef}
         action={WEB3FORMS_ENDPOINT}
         method="POST"
-        encType="multipart/form-data"
         onSubmit={handleSubmit(onFormSubmit)}
         className="space-y-6"
       >
-        {/* Web3Forms required */}
+        {/* requis Web3Forms */}
         <input type="hidden" name="access_key" value={WEB3FORMS_ACCESS_KEY} />
         <input type="hidden" name="subject" value="Nouvelle contestation FPS - AutoRecours" />
         <input type="hidden" name="from_name" value="AutoRecours" />
         <input type="hidden" name="redirect" value={REDIRECT_URL} />
-        {/* anti-bot (optionnel) */}
         <input type="checkbox" name="botcheck" className="hidden" style={{ display: 'none' }} />
 
         {/* Email */}
         <div>
-          <label className="block text-sm font-medium text-navy-700 mb-2">Email * (pour recevoir la confirmation)</label>
+          <label className="block text-sm font-medium text-navy-700 mb-2">
+            Email * (pour la confirmation)
+          </label>
           <input
             type="email"
             {...register('email', {
@@ -162,104 +112,67 @@ export default function ContactForm({ onSubmit, onClose }: ContactFormProps) {
             className="form-input"
             placeholder="votre@email.fr"
           />
-          {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email.message as string}</p>}
+          {errors.email && <p className="mt-1 text-sm text-red-600">{String(errors.email.message)}</p>}
         </div>
 
         {/* Téléphone */}
         <div>
-          <label className="block text-sm font-medium text-navy-700 mb-2">Téléphone (optionnel, pour suivi SMS)</label>
+          <label className="block text-sm font-medium text-navy-700 mb-2">
+            Téléphone (optionnel, pour suivi SMS)
+          </label>
           <input type="tel" {...register('phone')} name="phone" className="form-input" placeholder="06 12 34 56 78" />
         </div>
 
         {/* Numéro FPS */}
         <div>
-          <label className="block text-sm font-medium text-navy-700 mb-2">Numéro FPS * (sur l&apos;avis de paiement)</label>
+          <label className="block text-sm font-medium text-navy-700 mb-2">
+            Numéro FPS * (sur l&apos;avis de paiement)
+          </label>
           <input
             type="text"
             {...register('fps', {
               required: 'Numéro FPS obligatoire',
-              pattern: { value: /^[A-Z0-9-]+$/, message: 'Format invalide (lettres, chiffres et tirets uniquement)' },
+              pattern: { value: /^[A-Z0-9-]+$/, message: 'Format invalide' },
             })}
             name="fps"
             className="form-input"
             placeholder="FPS-2024-123456"
-            onChange={(e) => {
-              e.currentTarget.value = e.currentTarget.value.toUpperCase()
-            }}
+            onChange={(e) => (e.currentTarget.value = e.currentTarget.value.toUpperCase())}
           />
-          {errors.fps && <p className="mt-1 text-sm text-red-600">{errors.fps.message as string}</p>}
+          {errors.fps && <p className="mt-1 text-sm text-red-600">{String(errors.fps.message)}</p>}
         </div>
 
         {/* Motif */}
         <div>
-          <label className="block text-sm font-medium text-navy-700 mb-2">Motif de contestation *</label>
+          <label className="block text-sm font-medium text-navy-700 mb-2">
+            Motif de contestation *
+          </label>
           <select {...register('motif', { required: 'Motif obligatoire' })} name="motif" className="form-input">
             <option value="">Sélectionnez un motif</option>
-            {motifs.map((motif, index) => (
-              <option key={index} value={motif}>
-                {motif}
-              </option>
-            ))}
+            {['Stationnement interdit non signalé','Panne de la borne de paiement',"Erreur sur l'heure de stationnement",'Véhicule en panne','Problème de carte bancaire','Autre (à préciser)']
+              .map((m, i) => <option key={i} value={m}>{m}</option>)}
           </select>
-          {errors.motif && <p className="mt-1 text-sm text-red-600">{errors.motif.message as string}</p>}
+          {errors.motif && <p className="mt-1 text-sm text-red-600">{String(errors.motif.message)}</p>}
         </div>
 
-        {/* Upload FPS */}
+        {/* Nouveau : lien des pièces (Drive/Photos/Dropbox) */}
         <div>
           <label className="block text-sm font-medium text-navy-700 mb-2">
-            Photo ou scan de l&apos;avis FPS * (PDF, JPG, PNG - max 10Mo)
+            Lien vers vos pièces (optionnel)
           </label>
-          <div
-            {...getFpsRootProps()}
-            className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${
-              files.fps ? 'border-success-300 bg-success-50' : 'border-gray-300 hover:border-primary-400 hover:bg-primary-50'
-            }`}
-          >
-            {/* IMPORTANT : le name doit être "file_avis" pour Web3Forms */}
-            <input {...getFpsInputProps({ name: 'file_avis' })} />
-            {files.fps ? (
-              <div className="flex items-center justify-center space-x-2 text-success-700">
-                <CheckCircleIcon className="w-5 h-5" />
-                <span>{files.fps.name}</span>
-              </div>
-            ) : (
-              <div>
-                <PaperClipIcon className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                <p className="text-gray-600">Cliquez ou glissez le fichier ici</p>
-              </div>
-            )}
-          </div>
-          {!fpsFile && errors.file_avis && <p className="mt-1 text-sm text-red-600">Fichier FPS obligatoire</p>}
+          <input
+            type="url"
+            {...register('lien_pieces')}
+            name="lien_pieces"
+            className="form-input"
+            placeholder="https://drive.google.com/… ou https://photos.app.goo.gl/…"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Vous pouvez coller un lien (Drive, Photos, Dropbox) avec la photo de l’avis et, si possible, la carte grise.
+          </p>
         </div>
 
-        {/* Upload Carte Grise */}
-        <div>
-          <label className="block text-sm font-medium text-navy-700 mb-2">
-            Carte grise (optionnel - pour appui à la contestation)
-          </label>
-          <div
-            {...getCarteRootProps()}
-            className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${
-              files.carteGrise ? 'border-success-300 bg-success-50' : 'border-gray-300 hover:border-primary-400 hover:bg-primary-50'
-            }`}
-          >
-            {/* IMPORTANT : le name doit être "file_carte" */}
-            <input {...getCarteInputProps({ name: 'file_carte' })} />
-            {files.carteGrise ? (
-              <div className="flex items-center justify-center space-x-2 text-success-700">
-                <CheckCircleIcon className="w-5 h-5" />
-                <span>{files.carteGrise.name}</span>
-              </div>
-            ) : (
-              <div>
-                <PaperClipIcon className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                <p className="text-gray-600">Cliquez ou glissez le fichier ici</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* RGPD Consent */}
+        {/* RGPD */}
         <div className="space-y-4">
           <label className="flex items-start space-x-3">
             <input
@@ -269,34 +182,33 @@ export default function ContactForm({ onSubmit, onClose }: ContactFormProps) {
               className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
             />
             <span className="text-sm text-navy-600">
-              J&apos;accepte que mes données personnelles soient utilisées pour traiter ma contestation FPS. Conformément au RGPD,
-              vos données seront conservées pendant 3 ans maximum. *
+              J&apos;accepte que mes données soient utilisées pour traiter ma contestation FPS. *
             </span>
           </label>
-          {errors.rgpdConsent && <p className="text-sm text-red-600">{errors.rgpdConsent.message as string}</p>}
+          {errors.rgpdConsent && <p className="text-sm text-red-600">{String(errors.rgpdConsent.message)}</p>}
         </div>
 
-        {/* Submit */}
-        <div className="flex space-x-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-          >
+        {/* CTA */}
+        <div className="flex gap-4">
+          <button type="button" onClick={onClose}
+            className="flex-1 px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
             Annuler
           </button>
-          <button type="submit" disabled={isSubmitting} className="flex-1 btn-success disabled:opacity-50 disabled:cursor-not-allowed">
-            {isSubmitting ? 'Envoi en cours...' : 'Envoyer ma contestation'}
+          <button type="submit" disabled={isSubmitting}
+            className="flex-1 btn-success disabled:opacity-50 disabled:cursor-not-allowed">
+            {isSubmitting ? 'Envoi en cours…' : 'Envoyer ma contestation'}
           </button>
         </div>
 
-        {/* Sécurité */}
+        {/* Notice */}
         <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-          <div className="flex items-center space-x-2 text-blue-800">
+          <div className="flex items-center gap-2 text-blue-800">
             <CheckCircleIcon className="w-5 h-5" />
-            <span className="text-sm font-medium">Sécurisé et conforme RGPD</span>
+            <span className="text-sm font-medium">Étape suivante</span>
           </div>
-          <p className="text-sm text-blue-700 mt-1">Vos données sont chiffrées et ne seront utilisées que pour votre contestation.</p>
+          <p className="text-sm text-blue-700 mt-1">
+            Nous vous enverrons un email sous 24–48h. Si vous n’avez pas mis de lien, nous vous le demanderons alors.
+          </p>
         </div>
       </form>
     </div>
